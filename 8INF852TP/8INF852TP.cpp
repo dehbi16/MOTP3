@@ -692,16 +692,17 @@ int main(int argc, char* argv[])
 		SMSSDTSolution	Smeilleur(LeProb->getN());	//Sauvegarde de la meilleure solution
 		
 		// initialiser les paramètres
-		int nbiter = 300;
-		int m = 20;
-		int tau0 = 1;
+		int nbiter = 100;
+		int m = 10;
+		int tau0 = 0.1;
 		int N = LeProb->getN();
-		float alpha = 6;
+		float alpha = 4;
 		float beta = 3;
 		int Q = 100;
+		float SO;
 		vector<SMSSDTSolution*> ants;
 		ants.resize(m);
-
+		float mii = 1000000000000;
 
 		int index;
 
@@ -713,10 +714,19 @@ int main(int argc, char* argv[])
 			for (int l = 0; l < N; l++) {
 				tau[k][l] = tau0;
 			}
+		}
 
+		double max = -1;
+		for (int t = 0; t < N; t++) {
+			for (int i = 0; i < N; i++) {
+				if (max < LeProb->getS()[i][t]) {
+					max = LeProb->getS()[i][t];
+				}
+			}
 		}
 
 		for (int t = 0; t < nbiter; t++) {
+			SO = 0;
 			// choisir le premier job pour chaque fourmis 
 			vector<double> P;
 			P.resize(N);
@@ -738,11 +748,12 @@ int main(int argc, char* argv[])
 					float deno = 0;
 					for (int i = 0; i < N; i++) {
 						if (P[i] != 0) {
-							P[i] = pow(tau[ants[l]->Solution[k - 1]][i],alpha) * pow(1.0/(LeProb->getS()[ants[l]->Solution[k - 1]][i] + LeProb->getP()[i]),beta);
+							//P[i] = pow(tau[ants[l]->Solution[k - 1]][i],alpha) * pow(1.0/(LeProb->getS()[ants[l]->Solution[k - 1]][i] + LeProb->getP()[i]),beta);
+							P[i] = pow(tau[ants[l]->Solution[k - 1]][i], alpha) * pow(max / (LeProb->getS()[ants[l]->Solution[k - 1]][i] - LeProb->getD()[i] + LeProb->getP()[i]), beta);
 							deno += P[i];
 						}
 					}
-					for (int i = 0; i < N; i++) P[i] = P[i]/deno;
+					for (int i = 0; i < N; i++) P[i] /= deno;
 					
 					//calculer la meilleur probabilité
 					float max = P[0];
@@ -780,14 +791,49 @@ int main(int argc, char* argv[])
 						index = l;
 					}
 				}
+				SO += ants[l]->getObj();
 			}
+			int somme = 0;
+			//SO = 1000;
 			for (int i = 1; i < N; i++) {
-				tau[ants[index]->Solution[i - 1]][ants[index]->Solution[i]] += Q / ants[index]->getObj();
+				//tau[ants[index]->Solution[i - 1]][ants[index]->Solution[i]] += Q / ants[index]->getObj();
+				tau[ants[index]->Solution[i - 1]][ants[index]->Solution[i]] = 0.1 * tau[ants[index]->Solution[i - 1]][ants[index]->Solution[i]] + 0.9 * SO / ants[index]->getObj();
 			}
 			
 			
 			// Evaporation 
+			if (t % 10 == 0) {
+				for (int j = 0; j < N; j++) {
 
+					for (int i = 0; i < N; i++) {
+						tau[i][j] = 0.1 * tau[i][j] + 0.9 * 100 / ants[index]->getObj();
+					}
+				}
+			}
+			min = 1000;
+			for (int l = 0; l < m; l++) {
+				Tools::Evaluer(LeProb, *ants[l]);
+
+				if (l == 0) {
+					min = ants[l]->getObj();
+					index = l;
+				}
+				else {
+					if (min > ants[l]->getObj()) {
+						min = ants[l]->getObj();
+						index = l;
+
+					}
+				}
+
+			}
+
+			if (t > 0) {
+				if (mii > min) {
+					Smeilleur = *ants[index];
+					mii = min;
+				}
+			}
 		}
 		
 		for (int i = 0; i < N; i++) {
@@ -806,7 +852,7 @@ int main(int argc, char* argv[])
 		cout << endl;
 
 
-		Smeilleur = *ants[index];
+		//Smeilleur = *ants[index];
 		
 		End = clock(); // Arrêter le clock
 		Elapsed = (double(End - Start)) / CLOCKS_PER_SEC;	//Calculer le temps écoulé
